@@ -79,6 +79,51 @@
   #footer{border-top:1px solid var(--border);margin-top:10px;padding:16px 6px 8px;color:var(--dim);
           font-size:12px;line-height:1.7}
   #footer a{color:var(--accent);text-decoration:none}
+  /* ===== mobile ===== */
+  #menuBtn{display:none}
+  #scrim{display:none}
+  @media (max-width: 900px){
+    body{flex-direction:column;height:100dvh}
+    /* topbar becomes app bar with menu button */
+    #topbar{display:flex;align-items:center;gap:10px;padding:10px 14px;position:relative}
+    #topbar .tcol{flex:1;min-width:0}
+    #ptitle{font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    #pmeta{font-size:11px;margin-top:2px}
+    #menuBtn{display:flex;align-items:center;justify-content:center;flex-shrink:0;
+      width:38px;height:38px;border-radius:8px;border:1px solid var(--border);
+      background:var(--panel2);color:var(--text);font-size:18px;cursor:pointer}
+    #backBtn{display:none;align-items:center;justify-content:center;flex-shrink:0;
+      width:38px;height:38px;border-radius:8px;border:1px solid var(--border);
+      background:var(--panel2);color:var(--text);font-size:16px;cursor:pointer}
+    /* sidebar becomes drawer */
+    #sidebar{position:fixed;top:0;left:0;bottom:0;width:min(84vw,340px);z-index:60;
+      transform:translateX(-100%);transition:transform .25s ease;box-shadow:4px 0 24px rgba(0,0,0,.5)}
+    #sidebar.open{transform:translateX(0)}
+    #scrim{display:block;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:50;
+      opacity:0;pointer-events:none;transition:opacity .25s}
+    #scrim.show{opacity:1;pointer-events:auto}
+    #content{padding:12px 12px 24px}
+    /* full audio mobile: hide native bar height jank, larger tap targets */
+    audio{height:40px}
+    .btnrow button.act{flex:1 1 40%;padding:10px 8px;font-size:13px}
+    /* segment rows stack */
+    .seg{flex-wrap:wrap;gap:8px;padding:10px}
+    .seg .idx{min-width:22px}
+    .seg .stext{flex:1 1 calc(100% - 30px);font-size:15px}
+    .seg .mini{width:100%;height:36px;order:3}
+    .seg .stext.hidden{text-shadow:0 0 10px rgba(221,229,238,.5)}
+    /* prompt row */
+    #promptrow .seg{background:var(--panel2)}
+    #promptrow .stext{font-size:16px}
+    .card{padding:12px;margin-bottom:12px}
+    #footer{padding:12px 4px 4px}
+    #loading .bar{width:80vw}
+    ::-webkit-scrollbar{width:0}
+  }
+  @media (max-width: 380px){
+    .btnrow button.act{flex:1 1 100%}
+    .seg .stext{font-size:14px}
+  }
 </style>
 </head>
 <body>
@@ -96,10 +141,15 @@
     </div>
     <div id="list"></div>
   </div>
+  <div id="scrim"></div>
   <div id="main">
     <div id="topbar">
-      <div id="ptitle">选择一篇 Passage</div>
-      <div id="pmeta"></div>
+      <button id="menuBtn" aria-label="打开目录">☰</button>
+      <button id="backBtn" aria-label="返回目录">←</button>
+      <div class="tcol">
+        <div id="ptitle">选择一篇 Passage</div>
+        <div id="pmeta"></div>
+      </div>
     </div>
     <div id="content">
       <div id="empty">← 从左侧选择一篇 passage 开始练习</div>
@@ -261,6 +311,10 @@ function show(p){
   maskCard(fc, `<div id="fulltext" style="white-space:pre-wrap;font-size:14px;line-height:1.7;color:var(--dim)">${escapeHtml(p.full_text)}</div>`);
   document.getElementById('content').scrollTop=0;
   renderList();
+  // mobile: close drawer, show back button
+  const sb=document.getElementById('sidebar'), bbtn=document.getElementById('backBtn');
+  if(sb.classList.contains('open')) closeDrawer();
+  if(window.matchMedia('(max-width:900px)').matches && bbtn.style.display!=='flex') bbtn.style.display='flex';
 }
 
 function maskCard(card, bodyHtml){
@@ -280,6 +334,32 @@ function maskCard(card, bodyHtml){
 function scrollToSeg(el){
   el.scrollIntoView({block:'nearest',behavior:'smooth'});
 }
+
+/* mobile drawer */
+function openDrawer(){
+  document.getElementById('sidebar').classList.add('open');
+  document.getElementById('scrim').classList.add('show');
+}
+function closeDrawer(){
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('scrim').classList.remove('show');
+}
+document.getElementById('menuBtn').onclick=openDrawer;
+document.getElementById('scrim').onclick=closeDrawer;
+document.getElementById('backBtn').onclick=()=>{
+  closeDrawer();
+  if(window.matchMedia('(max-width:900px)').matches){
+    stopOne(); seqMode=false;
+    document.getElementById('view').style.display='none';
+    document.getElementById('empty').style.display='block';
+    document.getElementById('backBtn').style.display='none';
+    document.getElementById('ptitle').textContent='选择一篇 Passage';
+    document.getElementById('pmeta').textContent='';
+  }
+};
+document.getElementById('list').addEventListener('click',e=>{
+  if(e.target.closest('.pitem') && window.matchMedia('(max-width:900px)').matches) closeDrawer();
+});
 function escapeHtml(s){return (s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 
 document.getElementById('btnShowAll').onclick=()=>segTexts(t=>t.classList.remove('hidden'));
