@@ -186,7 +186,7 @@
           </div>
         </div>
         <div class="card">
-          <h3>首句</h3>
+          <h3>已给开头</h3>
           <div id="promptrow"></div>
           <div id="seglist"></div>
         </div>
@@ -329,7 +329,7 @@ function show(p){
   if(p.prompt){
     const d=document.createElement('div');
     d.className='seg';
-    d.innerHTML=`<span class="idx">首句</span>
+    d.innerHTML=`<span class="idx">已给开头</span>
       <div class="stext" style="color:var(--accent2)">${escapeHtml(p.prompt)}</div>`;
     pr.appendChild(d);
   }
