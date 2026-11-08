@@ -82,6 +82,10 @@
   #footer{border-top:1px solid var(--border);margin-top:10px;padding:16px 6px 8px;color:var(--dim);
           font-size:12px;line-height:1.7}
   #footer a{color:var(--accent);text-decoration:none}
+  /* desktop back button (hidden until a passage is selected) */
+  #backBtn{display:none;align-items:center;justify-content:center;flex-shrink:0;
+    width:36px;height:36px;border-radius:8px;border:1px solid var(--border);
+    background:var(--panel2);color:var(--text);font-size:16px;cursor:pointer}
   /* ===== mobile ===== */
   #menuBtn{display:none}
   #scrim{display:none}
@@ -98,6 +102,7 @@
     #backBtn{display:none;align-items:center;justify-content:center;flex-shrink:0;
       width:38px;height:38px;border-radius:8px;border:1px solid var(--border);
       background:var(--panel2);color:var(--text);font-size:16px;cursor:pointer}
+
     /* sidebar becomes drawer */
     #sidebar{position:fixed;top:0;left:0;bottom:0;width:min(84vw,340px);z-index:60;
       transform:translateX(-100%);transition:transform .25s ease;box-shadow:4px 0 24px rgba(0,0,0,.5)}
@@ -314,10 +319,10 @@ function show(p){
   maskCard(fc, `<div id="fulltext" style="white-space:pre-wrap;font-size:14px;line-height:1.7;color:var(--dim)">${escapeHtml(p.full_text)}</div>`);
   document.getElementById('content').scrollTop=0;
   renderList();
-  // mobile: close drawer, show back button
-  const sb=document.getElementById('sidebar'), bbtn=document.getElementById('backBtn');
+  // close drawer if open; always show back button once a passage is selected
+  const sb=document.getElementById('sidebar');
   if(sb.classList.contains('open')) closeDrawer();
-  if(window.matchMedia('(max-width:900px)').matches && bbtn.style.display!=='flex') bbtn.style.display='flex';
+  document.getElementById('backBtn').style.display='flex';
 }
 
 function maskCard(card, bodyHtml){
@@ -351,13 +356,24 @@ document.getElementById('menuBtn').onclick=openDrawer;
 document.getElementById('scrim').onclick=closeDrawer;
 document.getElementById('backBtn').onclick=()=>{
   closeDrawer();
+  stopOne(); seqMode=false;
   if(window.matchMedia('(max-width:900px)').matches){
-    stopOne(); seqMode=false;
+    // mobile: back to empty content, keep sidebar as the navigator
     document.getElementById('view').style.display='none';
     document.getElementById('empty').style.display='block';
-    document.getElementById('backBtn').style.display='none';
     document.getElementById('ptitle').textContent='选择一篇 Passage';
     document.getElementById('pmeta').textContent='';
+    document.getElementById('backBtn').style.display='none';
+    openDrawer();
+  } else {
+    // desktop: back to list view (sidebar is always visible, just clear selection)
+    current=null;
+    document.getElementById('view').style.display='none';
+    document.getElementById('empty').style.display='block';
+    document.getElementById('ptitle').textContent='选择一篇 Passage';
+    document.getElementById('pmeta').textContent='';
+    document.getElementById('backBtn').style.display='none';
+    renderList();
   }
 };
 document.getElementById('list').addEventListener('click',e=>{
