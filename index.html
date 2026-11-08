@@ -53,10 +53,7 @@
   .seg .stext.hidden{color:transparent;text-shadow:0 0 12px rgba(221,229,238,.55);user-select:none;cursor:pointer}
   .masked{position:relative;cursor:pointer}
   .masked .body{filter:blur(8px);user-select:none;pointer-events:none}
-  .masked .hint{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
-     color:var(--dim);font-size:13px}
   .masked.open .body{filter:none;user-select:auto;pointer-events:auto}
-  .masked.open .hint{display:none}
   .seg .stext.hidden::selection{background:transparent}
   .seg.playing{border-color:var(--accent);background:#1b2a3c}
   .seg .mini{width:170px;height:30px;flex-shrink:0}
@@ -94,7 +91,7 @@
       <div id="empty">← 从左侧选择一篇 passage 开始练习</div>
       <div id="view" style="display:none">
         <div class="card">
-          <h3>🔊 完整音频 <span class="tag" id="fullhint"></span></h3>
+          <h3>完整音频</h3>
           <audio id="fullplayer" controls preload="none"></audio>
           <div class="btnrow">
             <button class="act" id="btnShowAll">显示全部原文</button>
@@ -104,20 +101,21 @@
           </div>
         </div>
         <div class="card">
-          <h3>✂️ 分句音频 + 原文（默认隐藏，点击可显示）</h3>
+          <h3>首句</h3>
+          <div id="promptrow"></div>
           <div id="seglist"></div>
         </div>
         <div class="card" id="vocabcard">
-          <h3>📚 词汇难点（已遮盖）</h3>
+          <h3>词汇难点</h3>
         </div>
         <div class="card" id="sumcard">
-          <h3>📝 文章大意（已遮盖）</h3>
+          <h3>文章大意</h3>
         </div>
         <div class="card" id="fulltextcard">
-          <h3>📄 完整原文（已遮盖）</h3>
+          <h3>完整原文</h3>
         </div>
         <footer id="footer">
-          <p><b>资料来源 / Source:</b> 本站音频与文本整理自公开英语听力教学资料（含 VOA Learning English、British Council LearnEnglish 等），仅作个人学习索引之用。</p>
+          <p><b>资料来源 / Source:</b> 本站内容取自华研外语《英语专业四级听写》（出版社：世界图书出版有限公司），音频与文本仅作个人学习索引之用。</p>
           <p><b>免责声明 / Disclaimer:</b> 本站为非商业的个人英语听写练习静态页面。所有音频及文字内容的版权归原作者及原出版方所有；如内容涉及版权问题，请联系 <a href="mailto:liangcheng@njfu.edu.cn">liangcheng@njfu.edu.cn</a>，我会及时删除相关内容。请勿将本站内容用于任何商业用途。</p>
         </footer>
       </div>
@@ -191,6 +189,16 @@ function show(p){
   full.onerror=()=>{ if(srcFull && full.src!==srcFull){ full.src=srcFull; full.load(); } };
   full.src=srcPass1||srcFull||'';   // 优先 pass1（完整朗读段）；失败时回退
   if(full.src) full.load();
+  // 首句（已给出）: 不加提示小字，仅展示
+  const pr=document.getElementById('promptrow');
+  pr.innerHTML='';
+  if(p.prompt){
+    const d=document.createElement('div');
+    d.className='seg';
+    d.innerHTML=`<span class="idx">首句</span>
+      <div class="stext" style="color:var(--accent2)">${escapeHtml(p.prompt)}</div>`;
+    pr.appendChild(d);
+  }
   // segments
   const sl=document.getElementById('seglist');
   sl.innerHTML='';
@@ -198,7 +206,7 @@ function show(p){
     const d=document.createElement('div');
     d.className='seg'; d.dataset.i=i;
     d.innerHTML=`<span class="idx">${i+1}</span>
-      <div class="stext hidden" title="点击显示原文">${escapeHtml(s.text)}</div>
+      <div class="stext hidden">${escapeHtml(s.text)}</div>
       <audio class="mini" controls preload="none" src="${enc(s.file)}"></audio>`;
     const txt=d.querySelector('.stext');
     txt.onclick=()=>{txt.classList.toggle('hidden');};
@@ -239,7 +247,7 @@ function maskCard(card, bodyHtml){
     card.appendChild(m);
     m.addEventListener('click',()=>m.classList.toggle('open'));
   }
-  m.innerHTML=`<div class="body">${bodyHtml}</div><div class="hint">👆 点击显示 / 点击收起</div>`;
+  m.innerHTML=`<div class="body">${bodyHtml}</div>`;
   m.classList.remove('open');
 }
 
