@@ -270,46 +270,74 @@ document.getElementById('search').addEventListener('input',renderList);
 
 function stopOne(){ if(oneAudio){oneAudio.pause(); oneAudio=null;} if(oneSegEl){oneSegEl.classList.remove('playing'); oneSegEl=null;} }
 
-/* ---- unit audio prefetch with progress bar ---- */
+/* ---- unit audio prefetch: fully buffer into memory (blob URLs) ---- */
 let loadToken=0;
+const blobUrls=new Map();          // enc(url) -> objectURL
+function revokeBlobs(){
+  for(const u of blobUrls.values()) URL.revokeObjectURL(u);
+  blobUrls.clear();
+}
+function applyBlob(url, obj){
+  document.querySelectorAll('#view audio[data-src]').forEach(a=>{
+    if(a.dataset.src!==url) return;
+    if(!a.paused) return;          // 正在播放：不打断其当前流
+    a.src=obj;                     // 指向内存，播放零网络
+    a.dataset.blob='1';
+  });
+}
+function blobFallback(a){
+  a.addEventListener('error',()=>{
+    if(a.dataset.blob==='1'){      // 某些浏览器不支持 blob 媒体，回退到网络地址（缓存已预热）
+      a.dataset.blob='';
+      a.src=a.dataset.src;
+      a.load();
+    }
+  });
+}
 function prefetchUnitAudio(p){
   const myToken=++loadToken;
   const urls=[p.pass1_file, ...p.segments.map(s=>s.file)].filter(Boolean).map(enc);
-  const barWrap=document.getElementById('unitload');
+  const wrap=document.getElementById('unitload');
   const bar=document.getElementById('unitloadbar');
   const msg=document.getElementById('unitloadmsg');
-  if(!barWrap) return;
-  barWrap.style.display='flex';
+  if(!wrap) return;
+  const total=urls.length;
+  wrap.style.display='flex';
   bar.style.width='0%';
-  msg.textContent=`加载音频 0/${urls.length}`;
+  msg.textContent=`加载音频 0/${total}`;
   let done=0, failed=0;
   const update=()=>{
     if(myToken!==loadToken) return;
-    bar.style.width=Math.round(done/urls.length*100)+'%';
-    msg.textContent= failed? `加载音频 ${done}/${urls.length}（${failed} 个失败）` : `加载音频 ${done}/${urls.length}`;
-    if(done+failed>=urls.length){
-      setTimeout(()=>{ if(myToken===loadToken) barWrap.style.display='none'; },600);
+    const fin=done+failed;
+    bar.style.width=Math.round(fin/total*100)+'%';
+    msg.textContent= failed? `加载音频 ${done}/${total}（${failed} 个失败）` : `加载音频 ${done}/${total}`;
+    if(fin>=total) setTimeout(()=>{ if(myToken===loadToken) wrap.style.display='none'; },500);
+  };
+  if(!total){ bar.style.width='100%'; setTimeout(()=>wrap.style.display='none',300); return; }
+  // real bounded concurrency: count only after the whole body is read
+  const CONC=4; let idx=0, active=0;
+  const pump=()=>{
+    if(myToken!==loadToken) return;
+    while(active<CONC && idx<total){
+      const u=urls[idx++]; active++;
+      fetch(u).then(r=>{ if(!r.ok) throw new Error(r.status); return r.blob(); })
+        .then(b=>{
+          if(myToken!==loadToken) return;   // 旧篇章的结果直接丢弃，不创建 blob
+          const o=URL.createObjectURL(b);
+          blobUrls.set(u,o);
+          applyBlob(u,o);
+          done++;
+        })
+        .catch(()=>{ if(myToken!==loadToken) return; failed++; })
+        .finally(()=>{ if(myToken===loadToken){ active--; update(); pump(); } });
     }
   };
-  // parallel prefetch with limited concurrency
-  const CONC=4; let idx=0;
-  const worker=()=>{
-    while(idx<urls.length){
-      const u=urls[idx++];
-      fetch(u,{method:'GET'}).then(r=>{
-        if(myToken!==loadToken) return;
-        done++; update();
-      }).catch(()=>{
-        if(myToken!==loadToken) return;
-        failed++; update();
-      });
-    }
-  };
-  for(let i=0;i<Math.min(CONC,urls.length);i++) worker();
+  pump();
 }
 
 function show(p){
   stopOne(); seqMode=false;
+  revokeBlobs();                    // 释放上一篇的内存音频
   current=p;
   document.getElementById('empty').style.display='none';
   document.getElementById('view').style.display='block';
@@ -319,10 +347,15 @@ function show(p){
   const full=AUDIO;
   const srcFull=p.full_file?enc(p.full_file):null;
   const srcPass1=p.pass1_file?enc(p.pass1_file):null;
-  full.onerror=()=>{ if(srcFull && full.src!==srcFull){ full.src=srcFull; full.load(); } };
-  full.src=srcPass1||srcFull||'';   // 优先 pass1（完整朗读段）；失败时回退
+  full.dataset.src=srcPass1||srcFull||'';
+  full.dataset.blob='';
+  full.onerror=()=>{
+    if(full.dataset.blob==='1'){ full.dataset.blob=''; full.src=full.dataset.src; full.load(); return; }
+    if(srcFull && full.src!==srcFull){ full.src=srcFull; full.load(); }
+  };
+  blobFallback(full);
+  full.src=full.dataset.src;
   if(full.src) full.load();
-  prefetchUnitAudio(p);   // 进入篇章时预取本单元全部音频（进度条）
   // 首句（已给出）: 不加提示小字，仅展示
   const pr=document.getElementById('promptrow');
   pr.innerHTML='';
@@ -341,10 +374,11 @@ function show(p){
     d.className='seg'; d.dataset.i=i;
     d.innerHTML=`<span class="idx">${i+1}</span>
       <div class="stext hidden">${escapeHtml(s.text)}</div>
-      <audio class="mini" controls preload="none" src="${enc(s.file)}"></audio>`;
+      <audio class="mini" controls preload="none" data-blob="" data-src="${enc(s.file)}" src="${enc(s.file)}"></audio>`;
     const txt=d.querySelector('.stext');
     txt.onclick=()=>{txt.classList.toggle('hidden');};
     const a=d.querySelector('audio');
+    blobFallback(a);
     a.addEventListener('play',()=>{ oneAudio=a; oneSegEl=d;
       document.querySelectorAll('.seg.playing').forEach(x=>x.classList.remove('playing'));
       d.classList.add('playing'); scrollToSeg(d);});
@@ -352,6 +386,7 @@ function show(p){
       if(seqMode) playNext();});
     sl.appendChild(d);
   });
+  prefetchUnitAudio(p);   // DOM 建好后才能把 blob 挂到播放器上
   // full text handled by masked fulltextcard above
   // vocab (masked)
   const vc=document.getElementById('vocabcard');
@@ -406,7 +441,7 @@ document.getElementById('menuBtn').onclick=openDrawer;
 document.getElementById('scrim').onclick=closeDrawer;
 document.getElementById('backBtn').onclick=()=>{
   closeDrawer();
-  stopOne(); seqMode=false;
+  stopOne(); seqMode=false; loadToken++; revokeBlobs();
   if(window.matchMedia('(max-width:900px)').matches){
     // mobile: back to empty content, keep sidebar as the navigator
     document.getElementById('view').style.display='none';
