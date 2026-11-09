@@ -76,6 +76,18 @@
   #unitload .ubar i{display:block;height:100%;width:0%;background:var(--accent2);
     border-radius:3px;transition:width .25s}
   #unitload .umsg{font-size:12px;color:var(--dim)}
+  /* consecutive-playback countdown */
+  #seqwait{display:none;align-items:center;gap:10px;background:var(--panel);
+    border:1px solid var(--border);border-radius:12px;padding:12px 16px;margin-bottom:14px;
+    position:sticky;top:0;z-index:11;box-shadow:0 2px 10px rgba(0,0,0,.35)}
+  #seqwait .stxt{font-size:13px;color:var(--dim);white-space:nowrap}
+  #seqwait .sbar{flex:1;height:6px;background:var(--panel2);border-radius:3px;overflow:hidden}
+  #seqwait .sbar i{display:block;height:100%;width:0%;background:var(--accent2);border-radius:3px;
+    transition:width .1s linear}
+  #seqwait .snum{font-size:13px;color:var(--accent2);font-variant-numeric:tabular-nums;min-width:44px;text-align:right}
+  #seqwait button.act{padding:5px 10px;font-size:12px}
+  #seqwait select{padding:5px 8px;border-radius:8px;border:1px solid var(--border);
+    background:var(--panel2);color:var(--text);font-size:12px}
   /* loading overlay */
   #loading{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;
     align-items:center;justify-content:center;z-index:999;gap:18px;transition:opacity .4s}
@@ -133,6 +145,9 @@
     .card{padding:12px;margin-bottom:12px}
     #unitload{padding:10px 12px;margin-bottom:10px;position:sticky;top:0;z-index:10;
       box-shadow:0 2px 10px rgba(0,0,0,.35)}
+    #seqwait{padding:10px 12px;margin-bottom:10px;flex-wrap:wrap;gap:8px}
+    #seqwait .stxt{display:none}
+    #seqwait .sbar{min-width:80px}
     #footer{padding:12px 4px 4px}
     #loading .bar{width:80vw}
     ::-webkit-scrollbar{width:0}
@@ -174,6 +189,17 @@
         <div id="unitload">
           <div class="ubar"><i id="unitloadbar"></i></div>
           <div class="umsg" id="unitloadmsg">加载音频…</div>
+        </div>
+        <div id="seqwait">
+          <span class="stxt">书写间隔</span>
+          <div class="sbar"><i id="seqwaitbar"></i></div>
+          <span class="snum" id="seqwaitnum">12.0 s</span>
+          <select id="seqwaitSec" aria-label="书写间隔秒数">
+            <option value="12" selected>12 秒</option>
+            <option value="8">8 秒</option>
+            <option value="0">不间隔</option>
+          </select>
+          <button class="act" id="seqwaitSkip">跳过等待</button>
         </div>
         <div class="card">
           <h3>原文音频</h3>
@@ -271,7 +297,15 @@ document.getElementById('search').addEventListener('input',renderList);
 function stopOne(){ if(oneAudio){oneAudio.pause(); oneAudio=null;} if(oneSegEl){oneSegEl.classList.remove('playing'); oneSegEl=null;} }
 
 /* ---- 同时只允许一个音频播放（play 不冒泡，用捕获阶段监听） ---- */
-let seqTarget=null;
+let seqTarget=null, seqTimer=null, seqDeadline=0;
+function cancelSeqWait(){
+  if(seqTimer){ clearInterval(seqTimer); seqTimer=null; }
+  document.getElementById('seqwait').style.display='none';
+}
+function stopSeq(){
+  seqMode=false; cancelSeqWait(); stopAllMinis();
+  document.querySelectorAll('.seg.playing').forEach(x=>x.classList.remove('playing'));
+}
 document.getElementById('view').addEventListener('play',e=>{
   const a=e.target;
   if(!a || a.tagName!=='AUDIO') return;
@@ -285,7 +319,7 @@ document.getElementById('view').addEventListener('play',e=>{
   if(seg){ seg.classList.add('playing'); scrollToSeg(seg); }
   oneAudio=a; oneSegEl=seg||null;
   // 用户手动点开别的音频即中断逐句连播，避免播完后意外续播
-  if(seqMode && a!==seqTarget) seqMode=false;
+  if(seqMode && a!==seqTarget){ seqMode=false; cancelSeqWait(); }
   seqTarget=null;
 },true);
 
@@ -355,7 +389,7 @@ function prefetchUnitAudio(p){
 }
 
 function show(p){
-  stopOne(); seqMode=false;
+  stopSeq(); stopOne();
   revokeBlobs();                    // 释放上一篇的内存音频
   current=p;
   document.getElementById('empty').style.display='none';
@@ -398,8 +432,10 @@ function show(p){
     txt.onclick=()=>{txt.classList.toggle('hidden');};
     const a=d.querySelector('audio');
     blobFallback(a);
-    a.addEventListener('ended',()=>{d.classList.remove('playing');
-      if(seqMode) playNext();});
+    a.addEventListener('ended',()=>{
+      d.classList.remove('playing');
+      if(seqMode) scheduleNext();
+    });
     sl.appendChild(d);
   });
   prefetchUnitAudio(p);   // DOM 建好后才能把 blob 挂到播放器上
@@ -457,7 +493,7 @@ document.getElementById('menuBtn').onclick=openDrawer;
 document.getElementById('scrim').onclick=closeDrawer;
 document.getElementById('backBtn').onclick=()=>{
   closeDrawer();
-  stopOne(); seqMode=false; loadToken++; revokeBlobs();
+  stopSeq(); stopOne(); loadToken++; revokeBlobs();
   if(window.matchMedia('(max-width:900px)').matches){
     // mobile: back to empty content, keep sidebar as the navigator
     document.getElementById('view').style.display='none';
@@ -488,10 +524,40 @@ function segTexts(fn){document.querySelectorAll('.seg .stext').forEach(fn);}
 
 document.getElementById('btnPlaySeq').onclick=()=>{
   if(!current) return;
-  stopOne(); seqMode=true; seqIdx=-1; playNext();
+  stopSeq(); seqMode=true; seqIdx=-1; playNext();
 };
-document.getElementById('btnStopSeq').onclick=()=>{seqMode=false; stopAllMinis();};
+document.getElementById('btnStopSeq').onclick=stopSeq;
+document.getElementById('seqwaitSkip').onclick=()=>{
+  if(seqTimer){ clearInterval(seqTimer); seqTimer=null; }
+  document.getElementById('seqwait').style.display='none';
+  if(seqMode) playNext();
+};
 function stopAllMinis(){document.querySelectorAll('#view audio').forEach(a=>a.pause());}
+// 每句播完后的书写间隔（默认 12 秒，模拟专四第二/三遍）
+function scheduleNext(){
+  const sec=Number(document.getElementById('seqwaitSec').value)||0;
+  if(sec<=0){ playNext(); return; }
+  const wrap=document.getElementById('seqwait');
+  const bar=document.getElementById('seqwaitbar');
+  const num=document.getElementById('seqwaitnum');
+  const total=sec*1000;
+  seqDeadline=performance.now()+total;
+  wrap.style.display='flex';
+  const tick=()=>{
+    if(!seqMode){ cancelSeqWait(); return; }
+    const left=Math.max(0, seqDeadline-performance.now());
+    bar.style.width=((total-left)/total*100)+'%';
+    num.textContent=(left/1000).toFixed(1)+' s';
+    if(left<=0){
+      clearInterval(seqTimer); seqTimer=null;
+      wrap.style.display='none';
+      if(seqMode) playNext();
+    }
+  };
+  bar.style.width='0%'; num.textContent=sec.toFixed(1)+' s';
+  tick();
+  seqTimer=setInterval(tick,100);
+}
 function playNext(){
   if(!seqMode||!current) return;
   seqIdx++;
