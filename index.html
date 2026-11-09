@@ -86,8 +86,15 @@
     transition:width .1s linear}
   #seqwait .snum{font-size:13px;color:var(--accent2);font-variant-numeric:tabular-nums;min-width:44px;text-align:right}
   #seqwait button.act{padding:5px 10px;font-size:12px}
-  #seqwait select{padding:5px 8px;border-radius:8px;border:1px solid var(--border);
-    background:var(--panel2);color:var(--text);font-size:12px}
+  /* gap setting (always visible) */
+  .gaprow{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+    margin-top:10px;font-size:13px;color:var(--dim)}
+  .gaprow input[type=range]{flex:1;min-width:120px;max-width:260px;
+    accent-color:var(--accent2);height:24px;cursor:pointer}
+  .gaprow input[type=range]:disabled{opacity:.4;cursor:not-allowed}
+  .gaprow .gval{color:var(--accent2);font-variant-numeric:tabular-nums;min-width:36px}
+  .gaprow label{display:flex;align-items:center;gap:5px;cursor:pointer;white-space:nowrap}
+  .gaprow input[type=checkbox]{accent-color:var(--accent2);width:15px;height:15px;cursor:pointer}
   /* loading overlay */
   #loading{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;
     align-items:center;justify-content:center;z-index:999;gap:18px;transition:opacity .4s}
@@ -148,6 +155,8 @@
     #seqwait{padding:10px 12px;margin-bottom:10px;flex-wrap:wrap;gap:8px}
     #seqwait .stxt{display:none}
     #seqwait .sbar{min-width:80px}
+    .gaprow{gap:8px;margin-top:8px}
+    .gaprow input[type=range]{min-width:100px;height:28px}
     #footer{padding:12px 4px 4px}
     #loading .bar{width:80vw}
     ::-webkit-scrollbar{width:0}
@@ -194,11 +203,6 @@
           <span class="stxt">书写间隔</span>
           <div class="sbar"><i id="seqwaitbar"></i></div>
           <span class="snum" id="seqwaitnum">12.0 s</span>
-          <select id="seqwaitSec" aria-label="书写间隔秒数">
-            <option value="12" selected>12 秒</option>
-            <option value="8">8 秒</option>
-            <option value="0">不间隔</option>
-          </select>
           <button class="act" id="seqwaitSkip">跳过等待</button>
         </div>
         <div class="card">
@@ -209,6 +213,12 @@
             <button class="act" id="btnHideAll">隐藏全部原文</button>
             <button class="act" id="btnPlaySeq">▶ 逐句连播</button>
             <button class="act" id="btnStopSeq">■ 停止连播</button>
+          </div>
+          <div class="gaprow">
+            <span>书写间隔</span>
+            <input type="range" id="seqwaitRange" min="5" max="15" step="1" value="12" aria-label="书写间隔秒数">
+            <span class="gval" id="seqwaitVal">12 s</span>
+            <label><input type="checkbox" id="seqwaitOff">不间隔</label>
           </div>
         </div>
         <div class="card">
@@ -306,6 +316,17 @@ function stopSeq(){
   seqMode=false; cancelSeqWait(); stopAllMinis();
   document.querySelectorAll('.seg.playing').forEach(x=>x.classList.remove('playing'));
 }
+function gapSec(){
+  const off=document.getElementById('seqwaitOff');
+  const range=document.getElementById('seqwaitRange');
+  const val=document.getElementById('seqwaitVal');
+  range.disabled=off.checked;
+  val.textContent=off.checked? '关' : range.value+' s';
+  return off.checked? 0 : Number(range.value);
+}
+document.getElementById('seqwaitRange').addEventListener('input',gapSec);
+document.getElementById('seqwaitOff').addEventListener('change',gapSec);
+gapSec();
 document.getElementById('view').addEventListener('play',e=>{
   const a=e.target;
   if(!a || a.tagName!=='AUDIO') return;
@@ -533,9 +554,9 @@ document.getElementById('seqwaitSkip').onclick=()=>{
   if(seqMode) playNext();
 };
 function stopAllMinis(){document.querySelectorAll('#view audio').forEach(a=>a.pause());}
-// 每句播完后的书写间隔（默认 12 秒，模拟专四第二/三遍）
+// 每句播完后的书写间隔（默认 12 秒，5–15 秒可调，可关闭）
 function scheduleNext(){
-  const sec=Number(document.getElementById('seqwaitSec').value)||0;
+  const sec=gapSec();
   if(sec<=0){ playNext(); return; }
   const wrap=document.getElementById('seqwait');
   const bar=document.getElementById('seqwaitbar');
