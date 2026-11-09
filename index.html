@@ -270,6 +270,25 @@ document.getElementById('search').addEventListener('input',renderList);
 
 function stopOne(){ if(oneAudio){oneAudio.pause(); oneAudio=null;} if(oneSegEl){oneSegEl.classList.remove('playing'); oneSegEl=null;} }
 
+/* ---- 同时只允许一个音频播放（play 不冒泡，用捕获阶段监听） ---- */
+let seqTarget=null;
+document.getElementById('view').addEventListener('play',e=>{
+  const a=e.target;
+  if(!a || a.tagName!=='AUDIO') return;
+  // 暂停其余所有音频（含原文音频 / 分句音频）
+  document.querySelectorAll('#view audio').forEach(x=>{
+    if(x!==a && !x.paused) x.pause();
+  });
+  // 高亮状态只保留当前句
+  document.querySelectorAll('.seg.playing').forEach(x=>x.classList.remove('playing'));
+  const seg=a.closest('.seg');
+  if(seg){ seg.classList.add('playing'); scrollToSeg(seg); }
+  oneAudio=a; oneSegEl=seg||null;
+  // 用户手动点开别的音频即中断逐句连播，避免播完后意外续播
+  if(seqMode && a!==seqTarget) seqMode=false;
+  seqTarget=null;
+},true);
+
 /* ---- unit audio prefetch: fully buffer into memory (blob URLs) ---- */
 let loadToken=0;
 const blobUrls=new Map();          // enc(url) -> objectURL
@@ -379,9 +398,6 @@ function show(p){
     txt.onclick=()=>{txt.classList.toggle('hidden');};
     const a=d.querySelector('audio');
     blobFallback(a);
-    a.addEventListener('play',()=>{ oneAudio=a; oneSegEl=d;
-      document.querySelectorAll('.seg.playing').forEach(x=>x.classList.remove('playing'));
-      d.classList.add('playing'); scrollToSeg(d);});
     a.addEventListener('ended',()=>{d.classList.remove('playing');
       if(seqMode) playNext();});
     sl.appendChild(d);
@@ -475,13 +491,15 @@ document.getElementById('btnPlaySeq').onclick=()=>{
   stopOne(); seqMode=true; seqIdx=-1; playNext();
 };
 document.getElementById('btnStopSeq').onclick=()=>{seqMode=false; stopAllMinis();};
-function stopAllMinis(){document.querySelectorAll('.seg audio').forEach(a=>a.pause());}
+function stopAllMinis(){document.querySelectorAll('#view audio').forEach(a=>a.pause());}
 function playNext(){
   if(!seqMode||!current) return;
   seqIdx++;
-  const segs=document.querySelectorAll('.seg');
+  const segs=document.querySelectorAll('#seglist .seg');
   if(seqIdx>=segs.length){seqMode=false;return;}
   const a=segs[seqIdx].querySelector('audio');
+  if(!a) return;
+  seqTarget=a;                  // 标记为连播推进，不被当作用户打断
   a.currentTime=0; a.play();
 }
 
